@@ -1,0 +1,8 @@
+[package]
+name = "sizedur"
+version = "0.1.0"
+edition = "2021"
+description = "Strict-by-default parser for byte size and duration literals"
+license = "MIT"
+
+[dependencies]
