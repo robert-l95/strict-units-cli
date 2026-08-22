@@ -129,3 +129,117 @@ pub fn format_duration(d: Duration) -> String {
     }
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strict_compound_literal() {
+        let d = parse_duration("1h30m", false).unwrap();
+        assert_eq!(d.as_nanos(), 5_400_000_000_000);
+    }
+
+    #[test]
+    fn strict_single_component() {
+        assert_eq!(parse_duration("500ms", false).unwrap().as_nanos(), 500_000_000);
+        assert_eq!(parse_duration("30s", false).unwrap().as_secs(), 30);
+        assert_eq!(parse_duration("1d", false).unwrap().as_secs(), 86_400);
+    }
+
+    #[test]
+    fn strict_exact_fractional_component() {
+        assert_eq!(parse_duration("1.5s", false).unwrap().as_nanos(), 1_500_000_000);
+    }
+
+    #[test]
+    fn strict_rejects_out_of_order() {
+        let err = parse_duration("30m1h", false).unwrap_err().to_string();
+        assert!(err.contains("descending order"), "{err}");
+    }
+
+    #[test]
+    fn strict_rejects_repeated_unit() {
+        assert!(parse_duration("1h1h", false).is_err());
+    }
+
+    #[test]
+    fn strict_rejects_wrong_case() {
+        assert!(parse_duration("10S", false).is_err());
+    }
+
+    #[test]
+    fn strict_rejects_missing_unit() {
+        let err = parse_duration("10", false).unwrap_err().to_string();
+        assert!(err.contains("missing a unit"), "{err}");
+    }
+
+    #[test]
+    fn strict_rejects_whitespace() {
+        assert!(parse_duration("1h 30m", false).is_err());
+    }
+
+    #[test]
+    fn strict_rejects_unknown_unit() {
+        assert!(parse_duration("10z", false).is_err());
+    }
+
+    #[test]
+    fn strict_rejects_non_integer_nanoseconds() {
+        let err = parse_duration("1.5ns", false).unwrap_err().to_string();
+        assert!(err.contains("whole number"), "{err}");
+    }
+
+    #[test]
+    fn strict_rejects_empty_input() {
+        assert!(parse_duration("", false).is_err());
+    }
+
+    #[test]
+    fn lenient_strips_whitespace() {
+        let d = parse_duration(" 1h 30m ", true).unwrap();
+        assert_eq!(d.as_nanos(), 5_400_000_000_000);
+    }
+
+    #[test]
+    fn lenient_case_insensitive_units() {
+        let d = parse_duration("1H30M", true).unwrap();
+        assert_eq!(d.as_nanos(), 5_400_000_000_000);
+    }
+
+    #[test]
+    fn lenient_allows_any_order() {
+        let d = parse_duration("30m1h", true).unwrap();
+        assert_eq!(d.as_nanos(), 5_400_000_000_000);
+    }
+
+    #[test]
+    fn lenient_sums_repeated_units() {
+        let d = parse_duration("1h1h", true).unwrap();
+        assert_eq!(d.as_nanos(), 7_200_000_000_000);
+    }
+
+    #[test]
+    fn lenient_bare_number_is_seconds() {
+        let d = parse_duration("90", true).unwrap();
+        assert_eq!(d.as_nanos(), 90_000_000_000);
+    }
+
+    #[test]
+    fn lenient_rejects_negative() {
+        let err = parse_duration("-5", true).unwrap_err().to_string();
+        assert!(err.contains("negative"), "{err}");
+    }
+
+    #[test]
+    fn lenient_rounds_fractional_nanoseconds() {
+        assert_eq!(parse_duration("1.5ns", true).unwrap().as_nanos(), 2);
+    }
+
+    #[test]
+    fn format_duration_examples() {
+        assert_eq!(format_duration(Duration::ZERO), "0s");
+        assert_eq!(format_duration(Duration::from_nanos(5_400_000_000_000)), "1h30m");
+        assert_eq!(format_duration(Duration::from_millis(500)), "500ms");
+    }
+}

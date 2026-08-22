@@ -128,3 +128,99 @@ pub fn format_bytes(n: u64) -> String {
     }
     format!("{value:.2} {}", UNITS[idx])
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strict_decimal_units() {
+        assert_eq!(parse_bytes("10MB", false).unwrap(), 10_000_000);
+        assert_eq!(parse_bytes("1B", false).unwrap(), 1);
+        assert_eq!(parse_bytes("2KB", false).unwrap(), 2_000);
+        assert_eq!(parse_bytes("3PB", false).unwrap(), 3_000_000_000_000_000);
+    }
+
+    #[test]
+    fn strict_binary_units() {
+        assert_eq!(parse_bytes("1.5GiB", false).unwrap(), 1_610_612_736);
+        assert_eq!(parse_bytes("1KiB", false).unwrap(), 1_024);
+        assert_eq!(parse_bytes("1MiB", false).unwrap(), 1_048_576);
+    }
+
+    #[test]
+    fn strict_rejects_wrong_case() {
+        assert!(parse_bytes("10mb", false).is_err());
+        assert!(parse_bytes("10Mb", false).is_err());
+    }
+
+    #[test]
+    fn strict_rejects_missing_unit() {
+        let err = parse_bytes("512", false).unwrap_err().to_string();
+        assert!(err.contains("missing a unit"), "{err}");
+    }
+
+    #[test]
+    fn strict_rejects_whitespace() {
+        let err = parse_bytes("10 MB", false).unwrap_err().to_string();
+        assert!(err.contains("whitespace"), "{err}");
+        assert!(parse_bytes(" 10MB", false).is_err());
+        assert!(parse_bytes("10MB ", false).is_err());
+    }
+
+    #[test]
+    fn strict_rejects_unknown_unit() {
+        assert!(parse_bytes("10XB", false).is_err());
+    }
+
+    #[test]
+    fn strict_rejects_fractional_bytes() {
+        let err = parse_bytes("1.1B", false).unwrap_err().to_string();
+        assert!(err.contains("whole number"), "{err}");
+    }
+
+    #[test]
+    fn strict_rejects_empty_input() {
+        assert!(parse_bytes("", false).is_err());
+    }
+
+    #[test]
+    fn lenient_trims_and_lowercases() {
+        assert_eq!(parse_bytes("  10mb  ", true).unwrap(), 10_000_000);
+        assert_eq!(parse_bytes("10Mb", true).unwrap(), 10_000_000);
+    }
+
+    #[test]
+    fn lenient_single_letter_shorthand() {
+        assert_eq!(parse_bytes("10k", true).unwrap(), 10_000);
+        assert_eq!(parse_bytes("1g", true).unwrap(), 1_000_000_000);
+    }
+
+    #[test]
+    fn lenient_bare_number_is_bytes() {
+        assert_eq!(parse_bytes("512", true).unwrap(), 512);
+    }
+
+    #[test]
+    fn lenient_rounds_fractional_bytes() {
+        assert_eq!(parse_bytes("1.1B", true).unwrap(), 1);
+    }
+
+    #[test]
+    fn lenient_still_rejects_unknown_unit() {
+        assert!(parse_bytes("10XB", true).is_err());
+    }
+
+    #[test]
+    fn rejects_empty_after_trim() {
+        assert!(parse_bytes("   ", true).is_err());
+    }
+
+    #[test]
+    fn format_bytes_examples() {
+        assert_eq!(format_bytes(0), "0 B");
+        assert_eq!(format_bytes(1023), "1023 B");
+        assert_eq!(format_bytes(1024), "1.00 KiB");
+        assert_eq!(format_bytes(1_610_612_736), "1.50 GiB");
+    }
+}
