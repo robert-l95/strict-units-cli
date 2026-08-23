@@ -12,6 +12,29 @@ const UNITS: &[(&str, f64, u8)] = &[
     ("ns", 1.0, 6),
 ];
 
+fn find_unit(unit: &str, lenient: bool) -> Option<&'static (&'static str, f64, u8)> {
+    if lenient {
+        UNITS.iter().find(|u| u.0.eq_ignore_ascii_case(unit))
+    } else {
+        UNITS.iter().find(|u| u.0 == unit)
+    }
+}
+
+/// Reports whether `unit` is a recognized duration unit (ns, us, ms, s, m, h, d).
+pub fn is_duration_unit(unit: &str, lenient: bool) -> bool {
+    find_unit(unit, lenient).is_some()
+}
+
+/// Converts a `Duration` to a count of the given unit, e.g. 90s as "m" -> 1.5.
+pub fn unit_value(d: Duration, unit: &str, lenient: bool) -> Result<f64, ParseError> {
+    let entry = find_unit(unit, lenient).ok_or_else(|| {
+        ParseError::new(format!(
+            "{unit:?} is not a recognized duration unit; expected one of ns, us, ms, s, m, h, d"
+        ))
+    })?;
+    Ok(d.as_nanos() as f64 / entry.1)
+}
+
 /// Parses a duration literal such as "30s" or "1h30m" into a `Duration`.
 ///
 /// Strict mode forbids whitespace, requires an explicit case-sensitive unit
@@ -66,12 +89,7 @@ pub fn parse_duration(input: &str, lenient: bool) -> Result<Duration, ParseError
         }
         let (unit_str, remainder) = after_num.split_at(unit_end);
 
-        let matched = if lenient {
-            UNITS.iter().find(|u| u.0.eq_ignore_ascii_case(unit_str))
-        } else {
-            UNITS.iter().find(|u| u.0 == unit_str)
-        };
-        let unit_entry = matched.ok_or_else(|| {
+        let unit_entry = find_unit(unit_str, lenient).ok_or_else(|| {
             ParseError::new(format!(
                 "{unit_str:?} is not a recognized duration unit; expected one of ns, us, ms, s, m, h, d"
             ))
@@ -234,6 +252,32 @@ mod tests {
     #[test]
     fn lenient_rounds_fractional_nanoseconds() {
         assert_eq!(parse_duration("1.5ns", true).unwrap().as_nanos(), 2);
+    }
+
+    #[test]
+    fn unit_value_converts_strict() {
+        let d = Duration::from_nanos(5_400_000_000_000);
+        assert_eq!(unit_value(d, "m", false).unwrap(), 90.0);
+        assert_eq!(unit_value(d, "h", false).unwrap(), 1.5);
+    }
+
+    #[test]
+    fn unit_value_converts_lenient_case_insensitive() {
+        let d = Duration::from_secs(90);
+        assert_eq!(unit_value(d, "M", true).unwrap(), 1.5);
+    }
+
+    #[test]
+    fn unit_value_rejects_unknown_unit() {
+        assert!(unit_value(Duration::from_secs(1), "z", false).is_err());
+    }
+
+    #[test]
+    fn is_duration_unit_examples() {
+        assert!(is_duration_unit("h", false));
+        assert!(!is_duration_unit("H", false));
+        assert!(is_duration_unit("H", true));
+        assert!(!is_duration_unit("MB", true));
     }
 
     #[test]

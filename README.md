@@ -64,6 +64,21 @@ for checking a whole config file at once:
 $ grep -E '^(size|timeout)' app.conf | cut -d= -f2 | sizedur
 ```
 
+Pass `--to UNIT` to convert to an explicit unit instead of printing the
+canonical value. The target unit determines which domain the literal is
+parsed as, so `--to` works on bytes or durations without guessing:
+
+```
+$ sizedur --to GB 10MB
+10MB => 0.01 GB
+
+$ sizedur --to h 5400s
+5400s => 1.5 h
+
+$ sizedur --to MiB 1.5GiB
+1.5GiB => 1536 MiB
+```
+
 ## Strict rules
 
 Byte sizes:

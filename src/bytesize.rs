@@ -114,6 +114,25 @@ fn unrecognized(unit: &str) -> ParseError {
     ParseError::new(format!("{unit:?} is not a recognized byte unit even in lenient mode"))
 }
 
+/// Reports whether `unit` is a recognized byte size unit.
+pub fn is_byte_unit(unit: &str, lenient: bool) -> bool {
+    if lenient {
+        lenient_multiplier(unit).is_ok()
+    } else {
+        strict_multiplier(unit).is_ok()
+    }
+}
+
+/// Converts a byte count to a count of the given unit, e.g. 10_000_000 as "MB" -> 10.0.
+pub fn unit_value(bytes: u64, unit: &str, lenient: bool) -> Result<f64, ParseError> {
+    let multiplier = if lenient {
+        lenient_multiplier(unit)?
+    } else {
+        strict_multiplier(unit)?
+    };
+    Ok(bytes as f64 / multiplier)
+}
+
 /// Renders a byte count as a human-scale binary size, e.g. 1610612736 -> "1.50 GiB".
 pub fn format_bytes(n: u64) -> String {
     const UNITS: [&str; 6] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
@@ -214,6 +233,30 @@ mod tests {
     #[test]
     fn rejects_empty_after_trim() {
         assert!(parse_bytes("   ", true).is_err());
+    }
+
+    #[test]
+    fn unit_value_converts_strict() {
+        assert_eq!(unit_value(10_000_000, "MB", false).unwrap(), 10.0);
+        assert_eq!(unit_value(1_610_612_736, "GiB", false).unwrap(), 1.5);
+    }
+
+    #[test]
+    fn unit_value_converts_lenient_shorthand() {
+        assert_eq!(unit_value(10_000, "k", true).unwrap(), 10.0);
+    }
+
+    #[test]
+    fn unit_value_rejects_unknown_unit() {
+        assert!(unit_value(1, "XB", false).is_err());
+    }
+
+    #[test]
+    fn is_byte_unit_examples() {
+        assert!(is_byte_unit("MB", false));
+        assert!(!is_byte_unit("mb", false));
+        assert!(is_byte_unit("mb", true));
+        assert!(!is_byte_unit("h", true));
     }
 
     #[test]
