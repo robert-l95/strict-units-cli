@@ -79,6 +79,28 @@ $ sizedur --to MiB 1.5GiB
 1.5GiB => 1536 MiB
 ```
 
+Pass `--json` to print one JSON object per line instead of plain text, for
+scripts that want to parse the output rather than a human-readable sentence:
+
+```
+$ sizedur --json 10MB
+{"input":"10MB","domain":"bytes","bytes":10000000,"formatted":"9.54 MiB"}
+
+$ sizedur --json 1h30m
+{"input":"1h30m","domain":"duration","nanoseconds":5400000000000,"formatted":"1h30m"}
+
+$ sizedur --json --to GB 10MB
+{"input":"10MB","domain":"bytes","bytes":10000000,"value":0.01,"unit":"GB"}
+```
+
+Parse failures are written to stderr as JSON too, so a caller reading both
+streams doesn't need two parsers:
+
+```
+$ sizedur --json 10mb
+{"input":"10mb","error":"not a valid byte size (\"mb\" is not a recognized unit; expected one of B, KB, MB, GB, TB, PB, KiB, MiB, GiB, TiB, PiB (case-sensitive)) or duration (\"mb\" is not a recognized duration unit; expected one of ns, us, ms, s, m, h, d)"}
+```
+
 ## Strict rules
 
 Byte sizes:
