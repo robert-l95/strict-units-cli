@@ -79,6 +79,19 @@ $ sizedur --to MiB 1.5GiB
 1.5GiB => 1536 MiB
 ```
 
+Pass `--min` and/or `--max` to reject values outside a range. The bound is
+parsed in whichever domain the value itself resolves to, so one `--min`/`--max`
+pair works for a stream of either bytes or durations, but not a meaningful mix
+of both:
+
+```
+$ sizedur --max 1GB 2GB
+2GB: 2000000000 bytes is above --max 1GB (1000000000 bytes)
+
+$ sizedur --min 30s --max 5m 90s
+90s => 90000000000ns (1m30s)
+```
+
 Pass `--json` to print one JSON object per line instead of plain text, for
 scripts that want to parse the output rather than a human-readable sentence:
 
