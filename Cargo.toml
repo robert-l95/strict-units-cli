@@ -4,5 +4,10 @@ version = "0.1.0"
 edition = "2021"
 description = "Strict-by-default parser for byte size and duration literals"
 license = "MIT"
+readme = "README.md"
+repository = "https://github.com/robert-l95/strict-units-cli"
+keywords = ["cli", "duration", "bytesize", "parser"]
+categories = ["command-line-utilities"]
+exclude = [".gitignore"]
 
 [dependencies]
