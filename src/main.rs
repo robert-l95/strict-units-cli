@@ -23,7 +23,26 @@ fn print_usage() {
     eprintln!("  --help      show this message");
 }
 
-fn main() -> ExitCode {
+enum ParsedArgs {
+    Help,
+    Run {
+        lenient: bool,
+        json: bool,
+        to_unit: Option<String>,
+        min_value: Option<String>,
+        max_value: Option<String>,
+        values: Vec<String>,
+    },
+}
+
+// Anything starting with '-' that isn't a recognized flag is rejected
+// outright rather than falling through to the value parser. A real byte
+// size or duration literal never starts with '-' (negative sizes and
+// durations are rejected in both strict and lenient mode), so a stray flag
+// like that is always a typo, and parsing it as a value would just produce
+// a confusing "not a valid byte size or duration" error instead of pointing
+// at the actual mistake.
+fn parse_args<I: Iterator<Item = String>>(mut args: I) -> Result<ParsedArgs, String> {
     let mut lenient = false;
     let mut json = false;
     let mut to_unit: Option<String> = None;
@@ -31,39 +50,62 @@ fn main() -> ExitCode {
     let mut max_value: Option<String> = None;
     let mut values: Vec<String> = Vec::new();
 
-    let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--lenient" => lenient = true,
             "--json" => json = true,
             "--to" => match args.next() {
                 Some(unit) => to_unit = Some(unit),
-                None => {
-                    eprintln!("--to requires a unit argument (e.g. --to GB, --to h)");
-                    return ExitCode::FAILURE;
-                }
+                None => return Err("--to requires a unit argument (e.g. --to GB, --to h)".to_string()),
             },
             "--min" => match args.next() {
                 Some(value) => min_value = Some(value),
                 None => {
-                    eprintln!("--min requires a value argument (e.g. --min 1MB, --min 5s)");
-                    return ExitCode::FAILURE;
+                    return Err("--min requires a value argument (e.g. --min 1MB, --min 5s)".to_string())
                 }
             },
             "--max" => match args.next() {
                 Some(value) => max_value = Some(value),
                 None => {
-                    eprintln!("--max requires a value argument (e.g. --max 1GB, --max 1h)");
-                    return ExitCode::FAILURE;
+                    return Err("--max requires a value argument (e.g. --max 1GB, --max 1h)".to_string())
                 }
             },
-            "--help" | "-h" => {
-                print_usage();
-                return ExitCode::SUCCESS;
-            }
+            "--help" | "-h" => return Ok(ParsedArgs::Help),
+            other if other.starts_with('-') => return Err(format!("unrecognized flag: {other}")),
             other => values.push(other.to_string()),
         }
     }
+
+    Ok(ParsedArgs::Run {
+        lenient,
+        json,
+        to_unit,
+        min_value,
+        max_value,
+        values,
+    })
+}
+
+fn main() -> ExitCode {
+    let (lenient, json, to_unit, min_value, max_value, mut values) =
+        match parse_args(env::args().skip(1)) {
+            Ok(ParsedArgs::Help) => {
+                print_usage();
+                return ExitCode::SUCCESS;
+            }
+            Ok(ParsedArgs::Run {
+                lenient,
+                json,
+                to_unit,
+                min_value,
+                max_value,
+                values,
+            }) => (lenient, json, to_unit, min_value, max_value, values),
+            Err(err) => {
+                eprintln!("{err}");
+                return ExitCode::FAILURE;
+            }
+        };
 
     if values.is_empty() {
         let stdin = io::stdin();
@@ -395,5 +437,69 @@ mod tests {
         let bounds = Bounds { min: None, max: Some("1MB") };
         let err = process_one("10MB", false, Some("GB"), bounds).unwrap_err();
         assert!(err.contains("above --max"), "{err}");
+    }
+
+    fn args(items: &[&str]) -> impl Iterator<Item = String> {
+        items.iter().map(|s| s.to_string()).collect::<Vec<_>>().into_iter()
+    }
+
+    #[test]
+    fn parse_args_collects_flags_and_values() {
+        match parse_args(args(&["--lenient", "--json", "10MB", "1h30m"])).unwrap() {
+            ParsedArgs::Run { lenient, json, values, .. } => {
+                assert!(lenient);
+                assert!(json);
+                assert_eq!(values, vec!["10MB".to_string(), "1h30m".to_string()]);
+            }
+            ParsedArgs::Help => panic!("expected Run"),
+        }
+    }
+
+    #[test]
+    fn parse_args_collects_to_min_max() {
+        match parse_args(args(&["--to", "GB", "--min", "1MB", "--max", "1GB", "10MB"])).unwrap() {
+            ParsedArgs::Run { to_unit, min_value, max_value, values, .. } => {
+                assert_eq!(to_unit.as_deref(), Some("GB"));
+                assert_eq!(min_value.as_deref(), Some("1MB"));
+                assert_eq!(max_value.as_deref(), Some("1GB"));
+                assert_eq!(values, vec!["10MB".to_string()]);
+            }
+            ParsedArgs::Help => panic!("expected Run"),
+        }
+    }
+
+    #[test]
+    fn parse_args_recognizes_help() {
+        assert!(matches!(parse_args(args(&["--help"])).unwrap(), ParsedArgs::Help));
+        assert!(matches!(parse_args(args(&["-h"])).unwrap(), ParsedArgs::Help));
+        // --help short-circuits, so a bogus flag after it is never reached.
+        assert!(matches!(
+            parse_args(args(&["--help", "--bogus"])).unwrap(),
+            ParsedArgs::Help
+        ));
+    }
+
+    #[test]
+    fn parse_args_rejects_unrecognized_flag() {
+        let err = parse_args(args(&["--lenient", "--typo", "10MB"])).unwrap_err();
+        assert!(err.contains("unrecognized flag: --typo"), "{err}");
+    }
+
+    #[test]
+    fn parse_args_rejects_missing_to_argument() {
+        let err = parse_args(args(&["--to"])).unwrap_err();
+        assert!(err.contains("--to requires a unit argument"), "{err}");
+    }
+
+    #[test]
+    fn parse_args_rejects_missing_min_argument() {
+        let err = parse_args(args(&["--min"])).unwrap_err();
+        assert!(err.contains("--min requires a value argument"), "{err}");
+    }
+
+    #[test]
+    fn parse_args_rejects_missing_max_argument() {
+        let err = parse_args(args(&["--max"])).unwrap_err();
+        assert!(err.contains("--max requires a value argument"), "{err}");
     }
 }
