@@ -110,6 +110,11 @@ pub fn parse_duration(input: &str, lenient: bool) -> Result<Duration, ParseError
         rest = remainder;
     }
 
+    if !total_ns.is_finite() || total_ns > u64::MAX as f64 {
+        return Err(ParseError::new(format!(
+            "{s:?} overflows a 64-bit nanosecond count"
+        )));
+    }
     if total_ns.fract() != 0.0 {
         if lenient {
             total_ns = total_ns.round();
@@ -126,7 +131,11 @@ fn seconds_to_duration(secs: f64) -> Result<Duration, ParseError> {
     if secs < 0.0 {
         return Err(ParseError::new("duration cannot be negative"));
     }
-    Ok(Duration::from_nanos((secs * 1_000_000_000.0).round() as u64))
+    let ns = secs * 1_000_000_000.0;
+    if !ns.is_finite() || ns > u64::MAX as f64 {
+        return Err(ParseError::new("duration overflows a 64-bit nanosecond count"));
+    }
+    Ok(Duration::from_nanos(ns.round() as u64))
 }
 
 /// Renders a `Duration` as a compact compound literal, e.g. 5400s -> "1h30m".
@@ -211,6 +220,14 @@ mod tests {
     #[test]
     fn strict_rejects_empty_input() {
         assert!(parse_duration("", false).is_err());
+    }
+
+    #[test]
+    fn rejects_overflow_instead_of_saturating() {
+        let err = parse_duration("99999999999d", false).unwrap_err().to_string();
+        assert!(err.contains("overflows"), "{err}");
+        let err = parse_duration("99999999999999999999", true).unwrap_err().to_string();
+        assert!(err.contains("overflows"), "{err}");
     }
 
     #[test]

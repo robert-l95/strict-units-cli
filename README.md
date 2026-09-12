@@ -123,7 +123,7 @@ Byte sizes:
   1024)
 - the unit must match case exactly — `Mb` and `mb` are rejected
 - no whitespace anywhere in the literal
-- the result must be a whole number of bytes
+- the result must be a whole number of bytes that fits in 64 bits
 
 Durations:
 
@@ -132,7 +132,7 @@ Durations:
 - compound literals like `1h30m` must list units in strictly descending
   order, each used at most once — `30m1h` and `1h1h` are both rejected
 - no whitespace anywhere in the literal
-- the result must be a whole number of nanoseconds
+- the result must be a whole number of nanoseconds that fits in 64 bits
 
 ## `--lenient`
 

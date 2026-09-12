@@ -60,6 +60,11 @@ pub fn parse_bytes(input: &str, lenient: bool) -> Result<u64, ParseError> {
     };
 
     let bytes = number * multiplier;
+    if !bytes.is_finite() || bytes > u64::MAX as f64 {
+        return Err(ParseError::new(format!(
+            "{s:?} overflows a 64-bit byte count"
+        )));
+    }
     if bytes.fract() != 0.0 {
         if lenient {
             Ok(bytes.round() as u64)
@@ -201,6 +206,14 @@ mod tests {
     #[test]
     fn strict_rejects_empty_input() {
         assert!(parse_bytes("", false).is_err());
+    }
+
+    #[test]
+    fn rejects_overflow_instead_of_saturating() {
+        let err = parse_bytes("99999999999PB", false).unwrap_err().to_string();
+        assert!(err.contains("overflows"), "{err}");
+        let err = parse_bytes("99999999999PB", true).unwrap_err().to_string();
+        assert!(err.contains("overflows"), "{err}");
     }
 
     #[test]
